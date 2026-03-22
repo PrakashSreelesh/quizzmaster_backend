@@ -70,11 +70,14 @@ def get_quiz_analytics(quiz: Quiz, db: Session) -> QuizAnalytics:
             correct_rate=round(rate, 2),
         ))
 
+    max_score = sum(q.points for q in questions)
+    
     return QuizAnalytics(
         quiz_id=quiz.id,
         quiz_title=quiz.title,
         total_submissions=total,
         average_score=round(avg_score, 2),
+        max_score=max_score,
         average_percentage=round(avg_percentage, 2),
         highest_score=highest,
         lowest_score=lowest,
@@ -102,6 +105,7 @@ def get_student_analytics(user: User, db: Session) -> StudentAnalytics:
     recent = []
     for s in submissions[:5]:
         recent.append(RecentSubmission(
+            id=s.id,
             quiz_id=s.quiz_id,
             quiz_title=s.quiz.title if s.quiz else "Unknown",
             score=s.score or 0.0,
@@ -119,7 +123,7 @@ def get_student_analytics(user: User, db: Session) -> StudentAnalytics:
     )
 
 
-def get_quiz_leaderboard(quiz_id: int, db: Session) -> list:
+def get_quiz_leaderboard(quiz_id: str, db: Session) -> list:
     """Get ranked leaderboard for a specific quiz."""
     submissions = (
         db.query(Submission)

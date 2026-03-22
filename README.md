@@ -5,9 +5,9 @@ The backend of QuizzMaster is built with **FastAPI**, **SQLAlchemy**, and **Post
 ## 🛠 Tech Stack
 - **Framework**: FastAPI
 - **Database**: SQLAlchemy (ORM) + Alembic (Migrations)
-- **Security**: JWT & Passlib (bcrypt)
+- **Security**: JWT, Passlib (bcrypt), **SlowAPI** (Rate Limiting)
+- **Metadata**: User-Agent parsing for IP, Browser, and OS tracking.
 - **Testing**: Pytest & Coverage
-- **Task Scheduling**: Pydantic for validation
 
 ## 🏗 Directory Structure
 - `app/`: Main application logic.
@@ -41,6 +41,11 @@ docker-compose up backend
    ```bash
    uvicorn app.main:app --reload
    ```
+
+## 🔐 Security Features
+- **Rate Limiting**: Brute-force protection on `/auth/login` (10/min), `/auth/register` (3/hr), and `/auth/verify-otp` (10/hr).
+- **Metadata Tracking**: Every submission logs the student's IP address, Browser, and Operating System.
+- **Attempt Limits**: Enforced at the database and API level for every quiz.
 
 ## 📄 API Documentation
 Visit `http://localhost:8000/docs` for the interactive Swagger UI.

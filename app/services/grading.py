@@ -18,7 +18,11 @@ def _grade_choice(answer_value: str, options: list) -> bool:
         return False
 
     for option in options:
+        # Check by id first (standard)
         if option.get("id") == answer_value and option.get("is_correct", False):
+            return True
+        # Fallback to checking by text if no id present or text matches (for resilience)
+        if not option.get("id") and option.get("text") == answer_value and option.get("is_correct", False):
             return True
     return False
 
@@ -48,7 +52,7 @@ def grade_submission(submission: Submission, quiz: Quiz, db: Session) -> Submiss
     - Unanswered questions (null answer_value) always score zero
     """
     # Build question lookup map
-    question_map: Dict[int, Question] = {q.id: q for q in quiz.questions}
+    question_map: Dict[str, Question] = {q.id: q for q in quiz.questions}
 
     total_score = 0.0
     max_score = 0.0

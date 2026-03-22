@@ -5,7 +5,10 @@ Request/response models for all API endpoints.
 from datetime import datetime
 from typing import List, Optional, Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, Field
+from typing import TypeVar, Generic
+
+T = TypeVar("T")
 
 
 # ─── Auth / User Schemas ─────────────────────────────────────────────
@@ -41,7 +44,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     email: str
     username: str
     role: str
@@ -55,7 +58,7 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    user_id: Optional[int] = None
+    user_id: Optional[str] = None
     role: Optional[str] = None
 
 
@@ -97,8 +100,8 @@ class QuestionUpdate(BaseModel):
 class QuestionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    quiz_id: int
+    id: str
+    quiz_id: str
     text: str
     question_type: str
     points: float
@@ -110,8 +113,8 @@ class QuestionOutStudent(BaseModel):
     """Question view for students — is_correct stripped from options."""
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    quiz_id: int
+    id: str
+    quiz_id: str
     text: str
     question_type: str
     points: float
@@ -125,6 +128,7 @@ class QuizCreate(BaseModel):
     title: str
     description: str = ""
     time_limit_minutes: Optional[int] = None
+    max_attempts: Optional[int] = 1
 
 
 class QuizUpdate(BaseModel):
@@ -132,17 +136,19 @@ class QuizUpdate(BaseModel):
     description: Optional[str] = None
     is_published: Optional[bool] = None
     time_limit_minutes: Optional[int] = None
+    max_attempts: Optional[int] = None
 
 
 class QuizOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     title: str
     description: str
-    instructor_id: int
+    instructor_id: str
     is_published: bool
     time_limit_minutes: Optional[int]
+    max_attempts: int
     created_at: datetime
     updated_at: Optional[datetime]
     questions: List[QuestionOut] = []
@@ -153,35 +159,42 @@ class QuizOutStudent(BaseModel):
     """Quiz view for students — questions have is_correct stripped."""
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     title: str
     description: str
     is_published: bool
     time_limit_minutes: Optional[int]
+    max_attempts: int
     created_at: datetime
     questions: List[QuestionOutStudent] = []
     question_count: Optional[int] = None
+    instructor_name: Optional[str] = None
+    user_attempts: int = 0
 
 
 class QuizListOut(BaseModel):
     """Lightweight quiz for list views."""
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: str
     title: str
     description: str
     is_published: bool
     time_limit_minutes: Optional[int]
+    max_attempts: int
     created_at: datetime
     updated_at: Optional[datetime]
     question_count: int = 0
+    submission_count: int = 0
+    average_score: float = 0.0
     instructor_name: Optional[str] = None
+    user_attempts: int = 0
 
 
 # ─── Submission / Answer Schemas ─────────────────────────────────────
 
 class AnswerCreate(BaseModel):
-    question_id: int
+    question_id: str
     answer_value: Optional[str] = None
 
 
@@ -192,8 +205,8 @@ class SubmissionCreate(BaseModel):
 class AnswerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    question_id: int
+    id: str
+    question_id: str
     answer_value: Optional[str]
     is_correct: Optional[bool]
     points_awarded: Optional[float]
@@ -202,8 +215,8 @@ class AnswerOut(BaseModel):
 class AnswerDetailOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    question_id: int
+    id: str
+    question_id: str
     answer_value: Optional[str]
     is_correct: Optional[bool]
     points_awarded: Optional[float]
@@ -214,23 +227,30 @@ class AnswerDetailOut(BaseModel):
 class SubmissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    quiz_id: int
-    student_id: int
+    id: str
+    quiz_id: str
+    student_id: str
     score: Optional[float]
     max_score: Optional[float]
     percentage: Optional[float]
     submitted_at: datetime
     graded_at: Optional[datetime]
     answers: List[AnswerOut] = []
+    
+    # Metadata
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    browser: Optional[str] = None
+    os: Optional[str] = None
+    location: Optional[str] = None
 
 
 class SubmissionDetailOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    quiz_id: int
-    student_id: int
+    id: str
+    quiz_id: str
+    student_id: str
     score: Optional[float]
     max_score: Optional[float]
     percentage: Optional[float]
@@ -240,11 +260,48 @@ class SubmissionDetailOut(BaseModel):
     quiz_title: Optional[str] = None
     student_name: Optional[str] = None
 
+    # Metadata
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    browser: Optional[str] = None
+    os: Optional[str] = None
+    location: Optional[str] = None
+
+
+# ─── Generic Response Schemas ──────────────────────────────────────────
+
+class GenericResponse(BaseModel, Generic[T]):
+    success: bool = True
+    message: str = "Success"
+    data: Optional[T] = None
+
+class PaginationMeta(BaseModel):
+    total: int
+    page: int
+    size: int
+    pages: int
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: List[T]
+    meta: PaginationMeta
+
+# ─── OTP Schemas ─────────────────────────────────────────────────────
+
+class OTPVerify(BaseModel):
+    user_id: str
+    otp_code: str
+
+class OTPResend(BaseModel):
+    user_id: str
+
+class EmailUpdate(BaseModel):
+    user_id: str
+    new_email: EmailStr
 
 # ─── Analytics Schemas ───────────────────────────────────────────────
 
 class QuestionStat(BaseModel):
-    question_id: int
+    question_id: str
     question_text: str
     total_answers: int
     correct_answers: int
@@ -252,10 +309,11 @@ class QuestionStat(BaseModel):
 
 
 class QuizAnalytics(BaseModel):
-    quiz_id: int
+    quiz_id: str
     quiz_title: str
     total_submissions: int
     average_score: float
+    max_score: float
     average_percentage: float
     highest_score: float
     lowest_score: float
@@ -265,7 +323,7 @@ class QuizAnalytics(BaseModel):
 
 class LeaderboardEntry(BaseModel):
     rank: int
-    student_id: int
+    student_id: str
     student_name: str
     score: float
     percentage: float
@@ -275,7 +333,8 @@ class LeaderboardEntry(BaseModel):
 class RecentSubmission(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    quiz_id: int
+    id: str
+    quiz_id: str
     quiz_title: str
     score: float
     max_score: float
