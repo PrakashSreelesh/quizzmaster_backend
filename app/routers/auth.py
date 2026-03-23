@@ -83,12 +83,24 @@ def verify_otp(request: Request, data: OTPVerify, db: Session = Depends(get_db))
         UserOTP.is_used == False
     ).first()
 
-    if not otp:
+    # Allow OTP Bypass if configured
+    is_bypass = settings.OTP_BYPASS and data.otp_code == settings.OTP_BYPASS
+
+    if not otp and not is_bypass:
         raise HTTPException(status_code=400, detail="Invalid OTP code.")
     
-    # Ensure comparison is done with aware datetimes (SQLite stores naive UTC)
-    if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="OTP code has expired.")
+    # If using bypass, we need to find ANY active OTP for this user to mark as used, 
+    # or just proceed if none exists (but usually one does).
+    if is_bypass and not otp:
+        otp = db.query(UserOTP).filter(
+            UserOTP.user_id == data.user_id,
+            UserOTP.is_used == False
+        ).order_by(UserOTP.created_at.desc()).first()
+
+    if otp:
+        # Ensure comparison is done with aware datetimes
+        if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc) and not is_bypass:
+            raise HTTPException(status_code=400, detail="OTP code has expired.")
 
     # Activate user
     user = db.query(User).filter(User.id == data.user_id).first()
@@ -308,12 +320,23 @@ def reset_password(request: Request, data: ResetPasswordRequest, db: Session = D
         UserOTP.is_used == False
     ).first()
 
-    if not otp:
+    # Allow OTP Bypass if configured
+    is_bypass = settings.OTP_BYPASS and data.otp_code == settings.OTP_BYPASS
+
+    if not otp and not is_bypass:
         raise HTTPException(status_code=400, detail="Invalid OTP code.")
     
-    # Ensure comparison is done with aware datetimes (SQLite stores naive UTC)
-    if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="OTP code has expired.")
+    # If using bypass, find the latest unused OTP
+    if is_bypass and not otp:
+        otp = db.query(UserOTP).filter(
+            UserOTP.user_id == user.id,
+            UserOTP.is_used == False
+        ).order_by(UserOTP.created_at.desc()).first()
+
+    if otp:
+        # Ensure comparison is done with aware datetimes
+        if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc) and not is_bypass:
+            raise HTTPException(status_code=400, detail="OTP code has expired.")
 
     # Update password and mark OTP as used
     user.hashed_password = get_password_hash(data.new_password)
