@@ -14,6 +14,8 @@ from app.schemas import (
     GenericResponse, PaginatedResponse
 )
 from app.core.dependencies import get_current_user, get_current_instructor
+from app.utils.pagination import paginate
+from app.utils.search import apply_search
 from app.services.grading import grade_submission
 
 router = APIRouter()
@@ -70,6 +72,12 @@ def submit_quiz(
     elif "Android" in user_agent_str: os = "Android"
     elif "iPhone" in user_agent_str or "iPad" in user_agent_str: os = "iOS"
 
+    # Location Mock (In production, use a GEOLite2 DB or IpInfo API)
+    location = "0.0, 0.0" # Default
+    if ip_address and ip_address != "127.0.0.1":
+        # Placeholder for lat/long
+        location = "37.7749, -122.4194" # Mock San Francisco
+
     # Create submission
     submission = Submission(
         quiz_id=quiz_id,
@@ -78,6 +86,7 @@ def submit_quiz(
         user_agent=user_agent_str,
         browser=browser,
         os=os,
+        location=location,
     )
     db.add(submission)
     db.flush()
@@ -105,20 +114,54 @@ def submit_quiz(
     return GenericResponse(data=submission)
 
 
-@router.get("/my", response_model=List[SubmissionOut])
+@router.get("/my", response_model=GenericResponse[PaginatedResponse[SubmissionDetailOut]])
 def list_my_submissions(
+    search: str = None,
+    page: int = 1,
+    limit: int = 10,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List all submissions by the current user."""
-    submissions = (
+    """List all submissions by the current user with pagination and search on quiz title."""
+    query = (
         db.query(Submission)
+        .join(Quiz, Submission.quiz_id == Quiz.id)
         .filter(Submission.student_id == current_user.id)
-        .options(joinedload(Submission.answers))
-        .order_by(Submission.submitted_at.desc())
-        .all()
     )
-    return submissions
+    
+    if search:
+        query = query.filter(Quiz.title.ilike(f"%{search}%"))
+        
+    query = query.order_by(Submission.submitted_at.desc())
+    
+    pagination_result = paginate(query, page, limit)
+    submissions = pagination_result["items"]
+    
+    items = []
+    for sub in submissions:
+        detail = SubmissionDetailOut(
+            id=sub.id,
+            quiz_id=sub.quiz_id,
+            student_id=sub.student_id,
+            score=sub.score,
+            max_score=sub.max_score,
+            percentage=sub.percentage,
+            submitted_at=sub.submitted_at,
+            graded_at=sub.graded_at,
+            quiz_title=sub.quiz.title if sub.quiz else "Deleted Quiz",
+            answers=[],
+            ip_address=sub.ip_address,
+            user_agent=sub.user_agent,
+            browser=sub.browser,
+            os=sub.os,
+            location=sub.location,
+        )
+        items.append(detail)
+        
+    return GenericResponse(data={
+        "items": items,
+        "pagination": pagination_result["pagination"]
+    })
 
 
 @router.get("/my/{submission_id}", response_model=SubmissionDetailOut)
@@ -191,7 +234,7 @@ def list_quiz_submissions(
     quiz_id: str,
     search: str = None,
     page: int = 1,
-    size: int = 20,
+    limit: int = 20,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_instructor),
 ):
@@ -206,18 +249,18 @@ def list_quiz_submissions(
         .filter(Submission.quiz_id == quiz_id)
     )
     
+    # Generic Search on student username
     if search:
         query = query.filter(User.username.ilike(f"%{search}%"))
         
     query = query.order_by(Submission.submitted_at.desc())
     
-    total = query.count()
-    pages = (total + size - 1) // size if size > 0 else 1
-    submissions = query.offset((page - 1) * size).limit(size).all()
+    # Standard Pagination
+    pagination_result = paginate(query, page, limit)
+    submissions = pagination_result["items"]
 
     items = []
     for sub in submissions:
-        # We need Detailed view here (as per old code)
         detail = SubmissionDetailOut(
             id=sub.id,
             quiz_id=sub.quiz_id,
@@ -234,15 +277,11 @@ def list_quiz_submissions(
             user_agent=sub.user_agent,
             browser=sub.browser,
             os=sub.os,
+            location=sub.location,
         )
         items.append(detail)
 
     return GenericResponse(data={
         "items": items,
-        "meta": {
-            "total": total,
-            "page": page,
-            "size": size,
-            "pages": pages
-        }
+        "pagination": pagination_result["pagination"]
     })
