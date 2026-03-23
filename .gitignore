@@ -73,6 +73,10 @@ venv.bak/
 .idea/
 .vscode/
 
+# AI rules
+AGENTS.md
+CLAUDE.md
+
 # OS files
 .DS_Store
 Thumbs.db

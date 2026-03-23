@@ -1,12 +1,9 @@
-"""
-QuizzMaster Backend - SQLAlchemy ORM Models
-Defines: User, Quiz, Question, Submission, Answer
-"""
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Boolean, DateTime,
-    ForeignKey, JSON
+    Column, String, Text, Float, Boolean, DateTime,
+    ForeignKey, JSON, Integer
 )
 from sqlalchemy.orm import relationship
 
@@ -17,15 +14,23 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(255), unique=True, nullable=False, index=True)
     username = Column(String(100), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False)  # "instructor" or "student"
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 
     # Relationships
@@ -36,12 +41,14 @@ class User(Base):
 class Quiz(Base):
     __tablename__ = "quizzes"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(255), nullable=False)
     description = Column(Text, default="")
-    instructor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    instructor_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     is_published = Column(Boolean, default=False)
     time_limit_minutes = Column(Integer, nullable=True)  # null = no limit
+    max_attempts = Column(Integer, default=1)  # Instructor can set limit
+    categories = Column(JSON, default=list)    # e.g. ["IT", "Programming"]
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -55,8 +62,8 @@ class Quiz(Base):
 class Question(Base):
     __tablename__ = "questions"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    quiz_id = Column(String(36), ForeignKey("quizzes.id"), nullable=False)
     text = Column(Text, nullable=False)
     question_type = Column(String(20), nullable=False)  # "multiple_choice", "true_false", "short_answer"
     points = Column(Float, default=1.0)
@@ -71,14 +78,21 @@ class Question(Base):
 class Submission(Base):
     __tablename__ = "submissions"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    quiz_id = Column(Integer, ForeignKey("quizzes.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    quiz_id = Column(String(36), ForeignKey("quizzes.id"), nullable=False)
+    student_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     score = Column(Float, nullable=True)       # null until graded
     max_score = Column(Float, nullable=True)    # null until graded
     percentage = Column(Float, nullable=True)   # null until graded
     submitted_at = Column(DateTime, default=utcnow)
     graded_at = Column(DateTime, nullable=True)
+
+    # Metadata
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    browser = Column(String(100), nullable=True)
+    os = Column(String(100), nullable=True)
+    location = Column(String(255), nullable=True)
 
     # Relationships
     quiz = relationship("Quiz", back_populates="submissions")
@@ -89,9 +103,9 @@ class Submission(Base):
 class Answer(Base):
     __tablename__ = "answers"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    submission_id = Column(Integer, ForeignKey("submissions.id"), nullable=False)
-    question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    submission_id = Column(String(36), ForeignKey("submissions.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("questions.id"), nullable=False)
     answer_value = Column(Text, nullable=True)
     is_correct = Column(Boolean, nullable=True)       # null until graded
     points_awarded = Column(Float, nullable=True)     # null until graded
@@ -99,3 +113,16 @@ class Answer(Base):
     # Relationships
     submission = relationship("Submission", back_populates="answers")
     question = relationship("Question", back_populates="answers")
+
+
+class UserOTP(Base):
+    __tablename__ = "user_otps"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    otp_code = Column(String(6), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    user = relationship("User", backref="otps")

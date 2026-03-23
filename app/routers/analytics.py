@@ -23,7 +23,7 @@ router = APIRouter()
 
 @router.get("/quiz/{quiz_id}", response_model=QuizAnalytics)
 def quiz_analytics(
-    quiz_id: int,
+    quiz_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_instructor),
 ):
@@ -41,7 +41,7 @@ def quiz_analytics(
 
 @router.get("/quiz/{quiz_id}/leaderboard", response_model=List[LeaderboardEntry])
 def quiz_leaderboard(
-    quiz_id: int,
+    quiz_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_instructor),
 ):
