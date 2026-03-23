@@ -86,7 +86,8 @@ def verify_otp(request: Request, data: OTPVerify, db: Session = Depends(get_db))
     if not otp:
         raise HTTPException(status_code=400, detail="Invalid OTP code.")
     
-    if otp.expires_at < datetime.now(timezone.utc):
+    # Ensure comparison is done with aware datetimes (SQLite stores naive UTC)
+    if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="OTP code has expired.")
 
     # Activate user
@@ -312,7 +313,8 @@ def reset_password(request: Request, data: ResetPasswordRequest, db: Session = D
     if not otp:
         raise HTTPException(status_code=400, detail="Invalid OTP code.")
     
-    if otp.expires_at < datetime.now(timezone.utc):
+    # Ensure comparison is done with aware datetimes (SQLite stores naive UTC)
+    if otp.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="OTP code has expired.")
 
     # Update password and mark OTP as used
