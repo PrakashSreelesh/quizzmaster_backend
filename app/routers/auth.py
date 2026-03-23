@@ -167,23 +167,31 @@ def set_auth_cookies(response: Response, user_id: str, role: str):
     access_token = create_access_token(data={"sub": str(user_id), "role": role})
     refresh_token = create_refresh_token(data={"sub": str(user_id), "role": role})
     
+    # Cookie parameters
+    # Note: samesite='none' REQUIRES secure=True
+    samesite_val = settings.COOKIE_SAMESITE.lower() if settings.COOKIE_SAMESITE else "lax"
+    
+    cookie_params = {
+        "httponly": True,
+        "samesite": samesite_val,
+        "secure": settings.COOKIE_SECURE or (samesite_val == "none"),
+    }
+    
+    # Only set domain if it's explicitly provided and not empty
+    if settings.COOKIE_DOMAIN and settings.COOKIE_DOMAIN.strip():
+        cookie_params["domain"] = settings.COOKIE_DOMAIN
+
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite=settings.COOKIE_SAMESITE,
-        secure=settings.COOKIE_SECURE,
-        domain=settings.COOKIE_DOMAIN,
+        **cookie_params
     )
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
         max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
-        samesite=settings.COOKIE_SAMESITE,
-        secure=settings.COOKIE_SECURE,
-        domain=settings.COOKIE_DOMAIN,
+        **cookie_params
     )
 
 @router.post("/login", response_model=GenericResponse[dict])
