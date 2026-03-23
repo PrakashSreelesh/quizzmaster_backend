@@ -1,24 +1,35 @@
-"""
-QuizzMaster Backend - Quizzes Router
-Full CRUD for quizzes and questions (instructor).
-Published quiz views for students (answers stripped).
-"""
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Response
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 
 from app.database import get_db
-from app.models import User, Quiz, Question
+from app.models import User, Quiz, Question, Category, Submission
 from app.schemas import (
     QuizCreate, QuizUpdate, QuizOut, QuizListOut, QuizOutStudent,
-    QuestionCreate, QuestionUpdate, QuestionOut,
+    QuestionCreate, QuestionUpdate, QuestionOut, QuestionOutStudent,
+    GenericResponse, PaginatedResponse
 )
-from app.core.dependencies import get_current_user, get_current_instructor, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_instructor
 from app.utils.excel_parser import parse_excel_quiz, generate_template_excel
 from app.core.jobs import create_job, get_job_status
 from app.services.quiz_import import process_quiz_import
+from app.utils.pagination import paginate
+from app.utils.search import apply_search
 
 router = APIRouter()
+
+
+def upsert_categories(categories: List[str], db: Session):
+    """Ensure categories mentioned in quiz exist in the Category table."""
+    if not categories:
+        return
+    for name in categories:
+        # Check if exists (case-insensitive)
+        existing = db.query(Category).filter(Category.name.ilike(name)).first()
+        if not existing:
+            db.add(Category(name=name))
+    db.flush()
 
 
 # ─── Helper: strip is_correct from options ───────────────────────────
@@ -47,44 +58,38 @@ def create_quiz(
         description=quiz_data.description,
         time_limit_minutes=quiz_data.time_limit_minutes,
         max_attempts=quiz_data.max_attempts,
+        categories=quiz_data.categories,
         instructor_id=current_user.id,
     )
+    db.add(quiz)
+    upsert_categories(quiz_data.categories, db)
     db.commit()
     db.refresh(quiz)
     return quiz
 
 
-from app.utils.pagination import paginate
-from app.schemas import (
-    QuizCreate, QuizUpdate, QuizOut, QuizListOut, QuizOutStudent,
-    QuestionCreate, QuestionUpdate, QuestionOut, GenericResponse, PaginatedResponse
-)
+
+# ─── Instructor: Quiz List ──────────────────────────────────────────
 
 @router.get("/my", response_model=GenericResponse[PaginatedResponse[QuizListOut]])
 def list_my_quizzes(
     search: str = None,
     page: int = 1,
-    size: int = 10,
+    limit: int = 10,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_instructor),
 ):
     """List all quizzes created by the current instructor with search and pagination."""
     query = db.query(Quiz).filter(Quiz.instructor_id == current_user.id)
     
-    if search:
-        query = query.filter(
-            (Quiz.title.ilike(f"%{search}%")) | (Quiz.description.ilike(f"%{search}%"))
-        )
+    # Generic Search
+    query = apply_search(query, Quiz, search, ["title", "description"])
     
     query = query.order_by(Quiz.created_at.desc())
     
-    # Custom pagination logic to include stats
-    total = query.count()
-    pages = (total + size - 1) // size if size > 0 else 1
-    quizzes = query.offset((page - 1) * size).limit(size).all()
-
-    from sqlalchemy import func
-    from app.models import Submission
+    # Standard Pagination
+    pagination_result = paginate(query, page, limit)
+    quizzes = pagination_result["items"]
 
     items = []
     for q in quizzes:
@@ -104,33 +109,30 @@ def list_my_quizzes(
             is_published=q.is_published,
             time_limit_minutes=q.time_limit_minutes,
             max_attempts=q.max_attempts,
+            categories=q.categories or [],
             created_at=q.created_at,
             updated_at=q.updated_at,
             question_count=len(q.questions),
             submission_count=stats.count or 0,
             average_score=round(float(stats.avg or 0), 1),
             instructor_name=current_user.username,
-            user_attempts=0, # Instructor doesn't take their own quiz usually
+            user_attempts=0,
         ))
 
     return GenericResponse(data={
         "items": items,
-        "meta": {
-            "total": total,
-            "page": page,
-            "size": size,
-            "pages": pages
-        }
+        "pagination": pagination_result["pagination"]
     })
 
 
 @router.get("/published", response_model=GenericResponse[PaginatedResponse[QuizListOut]])
 def list_published_quizzes(
+    category: str = None,
     search: str = None,
     page: int = 1,
-    size: int = 12,
+    limit: int = 12,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """List all published quizzes with search and pagination."""
     query = (
@@ -139,16 +141,19 @@ def list_published_quizzes(
         .options(joinedload(Quiz.questions), joinedload(Quiz.instructor))
     )
     
-    if search:
-        query = query.filter(
-            (Quiz.title.ilike(f"%{search}%")) | (Quiz.description.ilike(f"%{search}%"))
-        )
+    # Generic Search
+    query = apply_search(query, Quiz, search, ["title", "description"])
+
+    # Category Filter
+    if category:
+        # Search for the category within the JSON array
+        query = query.filter(Quiz.categories.ilike(f'%"{category}"%'))
         
     query = query.order_by(Quiz.created_at.desc())
     
-    total = query.count()
-    pages = (total + size - 1) // size if size > 0 else 1
-    quizzes = query.offset((page - 1) * size).limit(size).all()
+    # Standard Pagination
+    pagination_result = paginate(query, page, limit)
+    quizzes = pagination_result["items"]
 
     items = []
     from app.models import Submission
@@ -167,6 +172,7 @@ def list_published_quizzes(
             is_published=q.is_published,
             time_limit_minutes=q.time_limit_minutes,
             max_attempts=q.max_attempts,
+            categories=q.categories or [],
             created_at=q.created_at,
             updated_at=q.updated_at,
             question_count=len(q.questions),
@@ -176,12 +182,7 @@ def list_published_quizzes(
     
     return GenericResponse(data={
         "items": items,
-        "meta": {
-            "total": total,
-            "page": page,
-            "size": size,
-            "pages": pages
-        }
+        "pagination": pagination_result["pagination"]
     })
 
 
@@ -201,8 +202,6 @@ def get_published_quiz(
     )
     if not quiz:
         raise HTTPException(status_code=404, detail="Published quiz not found")
-
-    from app.models import Submission
     user_attempts = db.query(Submission).filter(
         Submission.quiz_id == quiz_id, 
         Submission.student_id == current_user.id
@@ -216,6 +215,7 @@ def get_published_quiz(
         is_published=quiz.is_published,
         time_limit_minutes=quiz.time_limit_minutes,
         max_attempts=quiz.max_attempts,
+        categories=quiz.categories or [],
         created_at=quiz.created_at,
         question_count=len(quiz.questions),
         questions=[],
@@ -229,7 +229,6 @@ def get_published_quiz(
         random.shuffle(questions_list)
 
     for q in questions_list:
-        from app.schemas import QuestionOutStudent
         quiz_data.questions.append(QuestionOutStudent(
             id=q.id,
             quiz_id=q.quiz_id,
@@ -288,6 +287,9 @@ def update_quiz(
     update_data = quiz_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(quiz, field, value)
+
+    if quiz_data.categories is not None:
+        upsert_categories(quiz_data.categories, db)
 
     db.commit()
     db.refresh(quiz)

@@ -4,19 +4,19 @@ from app.schemas import PaginatedResponse, PaginationMeta
 
 T = TypeVar("T")
 
-def paginate(query: Query, page: int, size: int) -> dict:
+def paginate(query: Query, page: int, limit: int) -> dict:
     total = query.count()
-    pages = (total + size - 1) // size if size > 0 else 1
+    totalPages = (total + limit - 1) // limit if limit > 0 else 1
     
     # Apply pagination
-    items = query.offset((page - 1) * size).limit(size).all()
+    items = query.offset((page - 1) * limit).limit(limit).all()
     
     return {
         "items": items,
-        "meta": {
+        "pagination": {
             "total": total,
             "page": page,
-            "size": size,
-            "pages": pages
+            "limit": limit,
+            "totalPages": totalPages
         }
     }

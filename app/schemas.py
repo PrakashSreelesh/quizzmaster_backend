@@ -62,6 +62,24 @@ class TokenData(BaseModel):
     role: Optional[str] = None
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp_code: str
+    new_password: str
+
+
+class CategoryCreate(BaseModel):
+    name: str
+
+class CategoryOut(BaseModel):
+    id: str
+    name: str
+    created_at: datetime
+
 # ─── Question Schemas ────────────────────────────────────────────────
 
 class QuestionCreate(BaseModel):
@@ -129,6 +147,7 @@ class QuizCreate(BaseModel):
     description: str = ""
     time_limit_minutes: Optional[int] = None
     max_attempts: Optional[int] = 1
+    categories: List[str] = []
 
 
 class QuizUpdate(BaseModel):
@@ -137,6 +156,7 @@ class QuizUpdate(BaseModel):
     is_published: Optional[bool] = None
     time_limit_minutes: Optional[int] = None
     max_attempts: Optional[int] = None
+    categories: Optional[List[str]] = None
 
 
 class QuizOut(BaseModel):
@@ -149,6 +169,7 @@ class QuizOut(BaseModel):
     is_published: bool
     time_limit_minutes: Optional[int]
     max_attempts: int
+    categories: List[str] = []
     created_at: datetime
     updated_at: Optional[datetime]
     questions: List[QuestionOut] = []
@@ -165,6 +186,7 @@ class QuizOutStudent(BaseModel):
     is_published: bool
     time_limit_minutes: Optional[int]
     max_attempts: int
+    categories: List[str] = []
     created_at: datetime
     questions: List[QuestionOutStudent] = []
     question_count: Optional[int] = None
@@ -182,6 +204,7 @@ class QuizListOut(BaseModel):
     is_published: bool
     time_limit_minutes: Optional[int]
     max_attempts: int
+    categories: List[str] = []
     created_at: datetime
     updated_at: Optional[datetime]
     question_count: int = 0
@@ -278,12 +301,12 @@ class GenericResponse(BaseModel, Generic[T]):
 class PaginationMeta(BaseModel):
     total: int
     page: int
-    size: int
-    pages: int
+    limit: int
+    totalPages: int
 
 class PaginatedResponse(BaseModel, Generic[T]):
     items: List[T]
-    meta: PaginationMeta
+    pagination: PaginationMeta
 
 # ─── OTP Schemas ─────────────────────────────────────────────────────
 

@@ -14,6 +14,14 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -40,6 +48,7 @@ class Quiz(Base):
     is_published = Column(Boolean, default=False)
     time_limit_minutes = Column(Integer, nullable=True)  # null = no limit
     max_attempts = Column(Integer, default=1)  # Instructor can set limit
+    categories = Column(JSON, default=list)    # e.g. ["IT", "Programming"]
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
