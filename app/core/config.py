@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./quiz_platform.db"
     CORS_ORIGINS: str = "http://localhost:3000"
     FRONTEND_URL: str = "http://localhost:3000"
+    OTP_BYPASS: str | None = None
 
     # SMTP Settings
     SMTP_HOST: str = ""
