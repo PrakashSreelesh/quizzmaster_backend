@@ -151,7 +151,7 @@ def update_email_verification(data: EmailUpdate, background_tasks: BackgroundTas
 
 
 # Helper to set cookies
-def set_auth_cookies(response: Response, user_id: int, role: str):
+def set_auth_cookies(response: Response, user_id: str, role: str):
     access_token = create_access_token(data={"sub": str(user_id), "role": role})
     refresh_token = create_refresh_token(data={"sub": str(user_id), "role": role})
     
@@ -160,7 +160,6 @@ def set_auth_cookies(response: Response, user_id: int, role: str):
         value=access_token,
         httponly=True,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        expires=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         domain=settings.COOKIE_DOMAIN,
@@ -170,7 +169,6 @@ def set_auth_cookies(response: Response, user_id: int, role: str):
         value=refresh_token,
         httponly=True,
         max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
-        expires=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
         domain=settings.COOKIE_DOMAIN,
