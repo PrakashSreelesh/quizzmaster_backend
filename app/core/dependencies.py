@@ -41,10 +41,12 @@ def get_current_user(
 
     user_id = payload.get("sub")
     if user_id is None:
+        print(f"DEBUG AUTH: sub missing from payload")
         raise credentials_exception
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        print(f"DEBUG AUTH: User not found in DB - id={user_id}")
         raise credentials_exception
 
     if not user.is_active:
