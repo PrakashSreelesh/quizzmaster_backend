@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim as builder
+FROM python:3.14-slim as builder
 
 # Set the working directory in the container
 WORKDIR /app
@@ -14,10 +14,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install dependencies into a separate directory
+# PYO3_USE_ABI3_FORWARD_COMPATIBILITY is needed for pydantic-core on Python 3.14
+ENV PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Final stage
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
