@@ -2,6 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Response
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
+import sqlalchemy
 
 from app.database import get_db
 from app.models import User, Quiz, Question, Category, Submission
@@ -144,10 +145,9 @@ def list_published_quizzes(
     # Generic Search
     query = apply_search(query, Quiz, search, ["title", "description"])
 
-    # Category Filter
+    # Category Filter (cast to text for PostgreSQL JSON column compatibility)
     if category:
-        # Search for the category within the JSON array
-        query = query.filter(Quiz.categories.ilike(f'%"{category}"%'))
+        query = query.filter(func.cast(Quiz.categories, sqlalchemy.Text).ilike(f'%"{category}"%'))
         
     query = query.order_by(Quiz.created_at.desc())
     
