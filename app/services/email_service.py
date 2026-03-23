@@ -1,8 +1,11 @@
 import smtplib
 import ssl
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
+
+logger = logging.getLogger("quizzmaster")
 
 
 def _send_email(to_email: str, subject: str, html_content: str):
@@ -18,11 +21,7 @@ def _send_email(to_email: str, subject: str, html_content: str):
     ])
 
     if not smtp_configured:
-        print("\n" + "=" * 50)
-        print("SMTP NOT CONFIGURED. LOGGING EMAIL TO TERMINAL:")
-        print(f"To: {to_email}")
-        print(f"Subject: {subject}")
-        print("=" * 50 + "\n")
+        logger.warning("SMTP NOT CONFIGURED. Email not sent to: %s | Subject: %s", to_email, subject)
         return
 
     msg = MIMEMultipart()
@@ -33,29 +32,29 @@ def _send_email(to_email: str, subject: str, html_content: str):
 
     # Try SMTP_SSL on port 465 first (works on Render)
     try:
-        print(f"DEBUG SMTP: Trying SMTP_SSL — host={settings.SMTP_HOST} port=465")
+        logger.info("SMTP: Trying SMTP_SSL — host=%s port=465 user=%s", settings.SMTP_HOST, settings.SMTP_USER)
         context = ssl.create_default_context()
         with smtplib.SMTP_SSL(settings.SMTP_HOST, 465, context=context) as server:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
-        print("EMAIL SENT via SMTP_SSL (port 465)")
+        logger.info("SMTP: Email sent successfully via SMTP_SSL (port 465) to %s", to_email)
         return
     except Exception as e:
-        print(f"SMTP_SSL (port 465) failed: {e}")
+        logger.error("SMTP: SMTP_SSL (port 465) failed: %s", e)
 
     # Fallback: STARTTLS on port 587
     try:
-        print(f"DEBUG SMTP: Trying STARTTLS — host={settings.SMTP_HOST} port=587")
+        logger.info("SMTP: Trying STARTTLS — host=%s port=587", settings.SMTP_HOST)
         with smtplib.SMTP(settings.SMTP_HOST, 587) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
-        print("EMAIL SENT via STARTTLS (port 587)")
+        logger.info("SMTP: Email sent successfully via STARTTLS (port 587) to %s", to_email)
         return
     except Exception as e:
-        print(f"STARTTLS (port 587) failed: {e}")
+        logger.error("SMTP: STARTTLS (port 587) failed: %s", e)
         raise
 
 
@@ -84,8 +83,8 @@ def send_otp_email(email: str, otp_code: str, verification_url: str):
     try:
         _send_email(email, subject, html_content)
     except Exception as e:
-        print(f"FAILED TO SEND OTP EMAIL: {e}")
-        print(f"FALLBACK OTP LOG: {email} -> {otp_code}")
+        logger.error("FAILED TO SEND OTP EMAIL to %s: %s", email, e)
+        logger.info("FALLBACK OTP LOG: %s -> %s", email, otp_code)
 
 
 def send_password_reset_email(email: str, otp_code: str):
@@ -118,5 +117,5 @@ def send_password_reset_email(email: str, otp_code: str):
     try:
         _send_email(email, subject, html_content)
     except Exception as e:
-        print(f"FAILED TO SEND PASSWORD RESET EMAIL: {e}")
-        print(f"FALLBACK OTP LOG: {email} -> {otp_code}")
+        logger.error("FAILED TO SEND PASSWORD RESET EMAIL to %s: %s", email, e)
+        logger.info("FALLBACK OTP LOG: %s -> %s", email, otp_code)
