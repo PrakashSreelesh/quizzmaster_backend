@@ -2,7 +2,7 @@
 QuizzMaster Backend - FastAPI Dependencies
 Authentication and role-based access control dependencies.
 """
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
